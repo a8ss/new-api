@@ -8,7 +8,7 @@ DEV_POSTGRES_DB = new-api
 DEV_POSTGRES_USER = root
 DEV_SQLITE_PATH ?= one-api.db
 
-.PHONY: all build-web build-all-web start-api dev dev-api dev-api-rebuild dev-web reset-setup test
+.PHONY: all build-web build-all-web build-linux-amd64 start-api dev dev-api dev-api-rebuild dev-web reset-setup test
 
 all: build-all-web start-api
 
@@ -18,6 +18,11 @@ build-web:
 	@cd $(WEB_DIR) && DISABLE_ESLINT_PLUGIN='true' VITE_REACT_APP_VERSION=$$(cat ../VERSION) bun run build
 
 build-all-web: build-web
+
+build-linux-amd64: build-web
+	@mkdir -p build
+	@CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOWORK=off go build -trimpath -ldflags "-s -w -X 'github.com/QuantumNous/new-api/common.Version=$$(cat VERSION)'" -o build/new-api-linux-amd64
+	@upx -9 --force-overwrite build/new-api-linux-amd64 -o build/new-api-linux-amd64-$$(date +'%y%m%d')
 
 start-api:
 	@echo "Starting api dev server..."
