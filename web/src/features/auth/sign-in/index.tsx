@@ -25,14 +25,16 @@ import { AuthLayout } from '../auth-layout'
 import { TermsFooter } from '../components/terms-footer'
 import { UserAuthForm } from './components/user-auth-form'
 
+const loginBackgroundImageUrl = import.meta.env.VITE_LOGIN_BACKGROUND_IMAGE_URL
+
 export function SignIn() {
   const { t } = useTranslation()
   const { redirect } = useSearch({ from: '/(auth)/sign-in' })
   const { status } = useStatus()
 
   return (
-    <AuthLayout>
-      <div className='w-full space-y-8'>
+    <AuthLayout backgroundImageUrl={loginBackgroundImageUrl}>
+      <div className='w-full space-y-8 rounded-2xl bg-white p-6 shadow-xl sm:p-8'>
         <div className='space-y-2'>
           <h2 className='text-center text-2xl font-semibold tracking-tight sm:text-left'>
             {t('Sign in')}

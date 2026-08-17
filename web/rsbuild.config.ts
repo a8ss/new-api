@@ -9,11 +9,19 @@ import { tanstackRouter } from '@tanstack/router-plugin/rspack'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig(({ envMode }) => {
-  const env = loadEnv({ mode: envMode, prefixes: ['VITE_'] })
+  const env = loadEnv({
+    cwd: path.resolve(__dirname, '..'),
+    mode: envMode,
+    prefixes: ['VITE_'],
+  })
   const serverUrl =
     process.env.VITE_REACT_APP_SERVER_URL ||
     env.rawPublicVars.VITE_REACT_APP_SERVER_URL ||
     'http://localhost:3000'
+  const loginBackgroundImageUrl =
+    process.env.VITE_LOGIN_BACKGROUND_IMAGE_URL ||
+    env.rawPublicVars.VITE_LOGIN_BACKGROUND_IMAGE_URL ||
+    ''
 
   const isProd = envMode === 'production'
   const devProxy = Object.fromEntries(
@@ -53,6 +61,11 @@ export default defineConfig(({ envMode }) => {
       },
     },
     source: {
+      define: {
+        'import.meta.env.VITE_LOGIN_BACKGROUND_IMAGE_URL': JSON.stringify(
+          loginBackgroundImageUrl
+        ),
+      },
       entry: {
         index: './src/main.tsx',
       },
