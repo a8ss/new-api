@@ -1113,15 +1113,13 @@ function GroupPricingSection(props: {
   )
 }
 
-const TAB_VALUES = ['overview', 'performance', 'api'] as const
+const TAB_VALUES = ['api'] as const
 type TabValue = (typeof TAB_VALUES)[number]
 
 const TAB_META: Record<
   TabValue,
   { icon: React.ComponentType<{ className?: string }>; labelKey: string }
 > = {
-  overview: { icon: Info, labelKey: 'Overview' },
-  performance: { icon: HeartPulse, labelKey: 'Performance' },
   api: { icon: Code2, labelKey: 'API' },
 }
 
