@@ -368,6 +368,53 @@ it('combines creation and last use while keeping expiry, models and IP restricti
   expect(quotaTrigger.closest('td')).not.toHaveClass('pr-8')
 })
 
+it.each([
+  [1, false],
+  [2, true],
+  [3, false],
+  [4, false],
+])(
+  'copies the ID only for disabled status %s and explains other failures',
+  async (status, canCopy) => {
+    const { post } = await renderKeysPage(status)
+    const copy = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue()
+
+    expect(screen.queryByRole('button', { name: 'Copy Key ID' })).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: 'Open menu' }))
+    const item = screen.getByRole('menuitem', { name: 'Copy Key ID' })
+    expect(item).not.toHaveAttribute('aria-disabled', 'true')
+    await userEvent.click(item)
+    if (canCopy) {
+      await waitFor(() => expect(copy).toHaveBeenCalledWith('7'))
+      expect(await screen.findByText('Copied')).toBeInTheDocument()
+      expect(
+        screen.queryByText(
+          'Disable this key before using it with the derivation API.'
+        )
+      ).not.toBeInTheDocument()
+    } else {
+      expect(await screen.findByText('Copy failed')).toBeInTheDocument()
+      expect(
+        screen.getByText(
+          'Disable this key before using it with the derivation API.'
+        )
+      ).toBeVisible()
+      expect(copy).not.toHaveBeenCalled()
+    }
+    expect(post).not.toHaveBeenCalled()
+  }
+)
+
+it('hides the ID action for a derived key even when it is disabled', async () => {
+  await renderKeysPage(2, { custom_share_available: true })
+  await userEvent.click(screen.getByRole('button', { name: 'Open menu' }))
+
+  expect(
+    screen.getByRole('menuitem', { name: 'Share key' })
+  ).toBeInTheDocument()
+  expect(screen.queryByRole('menuitem', { name: /Copy Key ID/ })).toBeNull()
+})
+
 it('restores dates hidden by the old default and preserves unrelated column preferences', async () => {
   localStorage.setItem(
     'api-keys:column-visibility',
@@ -469,6 +516,20 @@ it('keeps full mobile information without group or quota section headings', asyn
       screen.queryByText(zh.translation['Group'], { exact: true })
     ).not.toBeInTheDocument()
     expect(screen.getByText('default')).toBeInTheDocument()
+    await userEvent.click(
+      screen.getByRole('button', { name: zh.translation['Open menu'] })
+    )
+    await userEvent.click(
+      screen.getByRole('menuitem', { name: zh.translation['Copy Key ID'] })
+    )
+    expect(await screen.findByText(zh.translation['Copy failed'])).toBeVisible()
+    expect(
+      screen.getByText(
+        zh.translation[
+          'Disable this key before using it with the derivation API.'
+        ]
+      )
+    ).toBeVisible()
     expect(screen.getByText('1x')).toBeInTheDocument()
     expect(screen.getByText(zh.translation['Models'])).toBeInTheDocument()
     expect(

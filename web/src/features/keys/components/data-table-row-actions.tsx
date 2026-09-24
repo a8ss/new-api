@@ -90,6 +90,7 @@ export function DataTableRowActions<TData>({
     loadingKeys,
   } = useApiKeys()
   const isEnabled = apiKey.status === API_KEY_STATUS.ENABLED
+  const isDisabled = apiKey.status === API_KEY_STATUS.DISABLED
   const { chatPresets, serverAddress } = useChatPresets()
   const [isTogglingStatus, setIsTogglingStatus] = useState(false)
   const isRealKeyLoading = Boolean(loadingKeys[apiKey.id])
@@ -252,6 +253,38 @@ export function DataTableRowActions<TData>({
             <Link size={16} />
           </DropdownMenuShortcut>
         </DropdownMenuItem>
+        {apiKey.custom_share_available && (
+          <DropdownMenuItem
+            onClick={() => {
+              setCurrentRow(apiKey)
+              setOpen('custom-share')
+            }}
+          >
+            {t('Share key')}
+          </DropdownMenuItem>
+        )}
+        {!apiKey.custom_share_available && (
+          <DropdownMenuItem
+            onClick={async () => {
+              if (!isDisabled) {
+                toast.error(t('Copy failed'), {
+                  description: t(
+                    'Disable this key before using it with the derivation API.'
+                  ),
+                })
+                return
+              }
+              const ok = await copyToClipboard(String(apiKey.id))
+              if (ok) toast.success(t('Copied'))
+              else toast.error(t('Copy failed'))
+            }}
+          >
+            {t('Copy Key ID')}
+            <DropdownMenuShortcut>
+              <Copy size={16} />
+            </DropdownMenuShortcut>
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onClick={async () => {

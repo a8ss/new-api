@@ -29,7 +29,14 @@ import { API_KEY_STATUS } from '../constants'
 import type { ApiKey } from '../types'
 
 type ApiKeyQuotaCellProps = {
-  apiKey: ApiKey
+  apiKey: Pick<
+    ApiKey,
+    | 'used_quota'
+    | 'remain_quota'
+    | 'unlimited_quota'
+    | 'status'
+    | 'expired_time'
+  >
   now: number
   variant?: 'table' | 'card'
 }

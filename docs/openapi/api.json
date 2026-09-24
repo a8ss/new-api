@@ -5229,6 +5229,153 @@
           }
         ]
       }
+    },
+    "/api/token/derive": {
+      "post": {
+        "summary": "派生模型调用密钥",
+        "deprecated": false,
+        "description": "使用 PAT 或控制台会话复制当前用户已禁用的密钥，生成新 key、设为可用、已用额度归零并自动生成分享；源密钥不变。订单号和手机号必填。其余配置继承，可覆盖名称、有效天数及整数金额。重复订单返回409。",
+        "tags": [
+          "令牌管理"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "source_token_id",
+                  "custom_order_no",
+                  "custom_phone"
+                ],
+                "properties": {
+                  "source_token_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "当前用户拥有且已禁用的模型调用密钥 ID"
+                  },
+                  "custom_order_no": {
+                    "type": "string",
+                    "description": "必填非空，去除首尾空白后最多128 UTF-8字节，全局唯一且区分大小写"
+                  },
+                  "custom_phone": {
+                    "type": "string",
+                    "maxLength": 32,
+                    "description": "必填，7–15位数字，允许开头+、空格、括号、连字符"
+                  },
+                  "name": {
+                    "type": "string",
+                    "description": "可选，最多50字节，传入空字符串也覆盖"
+                  },
+                  "valid_days": {
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 0,
+                    "description": "可选，从派生时计算天数，0永久；省略继承原到期时间，溢出拒绝"
+                  },
+                  "amount": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 1000000000,
+                    "description": "可选，金额乘 QuotaPerUnit 为额度，严格转换溢出拒绝；传入时关闭无限额度，0为零额度；不充值账户"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "integer"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "key": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "integer"
+                        },
+                        "expired_time": {
+                          "type": "integer"
+                        },
+                        "remain_quota": {
+                          "type": "integer"
+                        },
+                        "used_quota": {
+                          "type": "integer"
+                        },
+                        "unlimited_quota": {
+                          "type": "boolean"
+                        },
+                        "custom_phone": {
+                          "type": "string",
+                          "description": "认证后的派生响应返回完整手机号；匿名分享响应仅返回 **** 加后四位数字"
+                        },
+                        "api_addresses": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "models": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "custom_order_no": {
+                          "type": "string"
+                        },
+                        "custom_share_code": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9]{8}$",
+                          "description": "派生自动生成的8位大小写敏感分享码"
+                        },
+                        "custom_share_url": {
+                          "type": "string",
+                          "description": "CUSTOM_TOKEN_SHARE_BASE_URL 或 ServerAddress 加 /ck/{share_code}"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "订单号已被使用（包括软删除密钥），不返回已有密钥"
+          }
+        },
+        "security": [
+          {
+            "Combination343": []
+          },
+          {
+            "Combination1243": []
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -5405,6 +5552,18 @@
           },
           "unlimited_quota": {
             "type": "boolean"
+          },
+          "custom_order_no": {
+            "type": "string",
+            "nullable": true,
+            "description": "派生时写入的订单号；原创建接口忽略此字段",
+            "readOnly": true
+          },
+          "custom_phone": {
+            "type": "string",
+            "maxLength": 32,
+            "description": "派生时写入的联系手机号；原创建接口忽略此字段",
+            "readOnly": true
           }
         }
       },

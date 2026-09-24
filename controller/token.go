@@ -39,7 +39,9 @@ type tokenRequest struct {
 
 type tokenResponse struct {
 	*model.Token
-	AutoGroups []string `json:"auto_groups"`
+	AutoGroups           []string `json:"auto_groups"`
+	CustomShareAvailable bool     `json:"custom_share_available"`
+	CustomShareEnabled   bool     `json:"custom_share_enabled"`
 }
 
 func maxTokenQuota() int {
@@ -66,7 +68,7 @@ func buildMaskedTokenResponse(token *model.Token) *tokenResponse {
 	if len(autoGroups) == 0 {
 		autoGroups = nil
 	}
-	return &tokenResponse{Token: &maskedToken, AutoGroups: autoGroups}
+	return &tokenResponse{Token: &maskedToken, AutoGroups: autoGroups, CustomShareAvailable: token.CustomShareCode != nil, CustomShareEnabled: token.ActiveCustomShareCode() != ""}
 }
 
 func buildMaskedTokenResponses(tokens []*model.Token) []*tokenResponse {

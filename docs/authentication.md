@@ -174,3 +174,88 @@ Proof 同时绑定用户、登录会话、用户鉴权版本、会话版本和 s
 - Redis 限流从近似滑动窗口改为原子固定窗口，存在明确的边界双倍突发语义。
 - 用户级模型成功请求限流的 UTC 时间戳在滚动升级期间存在一个窗口的混合格式过渡，期间可能临时误放行或误拒绝。
 - 自建客户端应按新的 AuthBundle、`flow_token` 和 Security Proof 契约升级；PAT 客户端可直接移除 `New-Api-User`。
+
+## 自定义模型调用密钥派生与分享
+
+这是非官方扩展，数据库列和业务元数据使用 `custom_` 前缀。原 `POST /api/token/` 保持原有行为和 `{ "success": true, "message": "" }` 响应，不写入订单和手机号、不生成分享。
+
+新增 `POST /api/token/derive`：通过 `Authorization: Bearer <PAT>` 或控制台会话，复制当前用户已禁用的模型调用密钥，生成新的可用密钥。无需 `New-Api-User`；模型调用密钥本身不能认证管理接口。
+
+| 请求字段 | 规则 |
+| --- | --- |
+| `source_token_id` | 必填，当前用户拥有且状态为禁用的密钥 ID；其他用户、已删除、不存在或其他状态均拒绝 |
+| `custom_order_no` | 必填且非空，最多 128 UTF-8 字节；去除首尾空白、区分大小写、保留前导零 |
+| `custom_phone` | 必填且非空，最多 32 字节；7–15 位数字，允许开头的 `+`、空格、括号、连字符；未验证的联系方式，不要求唯一 |
+| `name` | 可选，传入则覆盖名称，最多 50 字节；空字符串也会覆盖 |
+| `valid_days` | 可选，非负整数，从派生时计算有效天数；0 为永久。不传则继承源密钥原到期时间，不重新计算 |
+| `amount` | 可选，0–1,000,000,000 的整数，按 `amount × QuotaPerUnit` 转为额度，沿用平台严格额度转换和舍入，溢出拒绝；传入时关闭无限额度，0 表示零额度 |
+
+复制源密钥的额度、无限额度标记、模型限制、IP 限制、分组、自动分组和跨组重试配置；上述可选参数仅覆盖对应值。新密钥 ID 和 key 重新生成，状态设为可用，创建/访问时间设为当前时间，已用额度归零，独立生成分享码；源密钥不变。金额只设置密钥限额，不充值用户账户。不传有效期或金额会继承源值，因此已到期或零额度的源配置需要调用方按需覆盖，状态启用并不绕过模型调用时的额度和到期校验。
+
+订单号在平台内全局唯一，包含软删除密钥；用户硬删除清理密钥后释放订单占用。数据库直接在 `custom_order_no` 上建立唯一索引（MySQL 使用 `utf8mb4_bin`，SQLite/PostgreSQL 区分大小写）。并发重复订单返回 HTTP 409、`success: false`、`Order number already has an API key`，不返回已有密钥。订单及手机号仅在派生时写入，普通密钥更新不能更改订单绑定。仅保留 `custom_order_no`、`custom_phone`、`custom_share_code` 三个存储字段，不增加产品表或未上线中间方案的兼容迁移。
+
+```http
+POST /api/token/derive
+Authorization: Bearer <PAT>
+Content-Type: application/json
+
+{
+  "source_token_id": 123,
+  "custom_order_no": "001Order",
+  "custom_phone": "+86 13800138000",
+  "name": "customer-order",
+  "valid_days": 30,
+  "amount": 10
+}
+```
+
+成功响应为 `{ "success": true, "message": "", "data": ... }`，保留此前扩展创建接口的响应字段：
+
+| 字段 | 含义 |
+| --- | --- |
+| `id`, `name`, `key` | 新密钥 ID、名称和完整密钥；`key` 不附加 `sk-` |
+| `status`, `expired_time` | 当前有效状态及 Unix 秒级到期时间；`-1` 为永久 |
+| `remain_quota`, `used_quota`, `unlimited_quota` | 额度计数与无限额度标记；单位为平台 quota |
+| `api_addresses` | 配置的模型 API 地址列表；未配置时前端使用当前站点地址 |
+| `models` | 与 `/v1/models` 共用逻辑，按分组、模型限制和计费配置筛选的模型列表 |
+| `custom_phone`, `custom_order_no` | 完整联系手机号和规范化后的订单号，仅认证后的派生响应返回 |
+| `custom_share_code`, `custom_share_url` | 自动生成的 8 位大小写敏感分享码和 `/ck/{share_code}` 链接 |
+
+派生响应为创建时快照；分享查询读取当前状态、额度和模型列表。额度沿用转发缓存，异步批量落库时数据库快照不保证最新。
+
+`.env` 的 `CUSTOM_TOKEN_SHARE_BASE_URL=https://keys.example.com` 配置分享页域名；为空时使用系统 `ServerAddress`，均无有效地址则返回相对路径。该配置只改变分享链接，不改变模型 API 地址。独立分享域名须将 `/ck/` 和 `/api/custom/token-share` 路由到本应用。修改环境配置后重启服务。
+
+分享页为 `/ck/{share_code}`，免登录并适配手机。页面会展示完整密钥（复制时带 `sk-`）、脱敏手机号（`****` 加后四位数字）、接口地址、密钥额度、有效期、状态和可用模型；不展示订单号、用户资料或账户总余额。持有链接即可取得密钥并使用其权限，分享链接应当作为凭据保管。
+
+通过派生接口创建时自动开启分享；原创建接口不生成分享。所有者可以在密钥行菜单的“API 密钥分享”中复制、关闭或重新生成已有分享：
+
+- `POST /api/token/:id/custom-share`：读取当前分享链接。
+- `PUT /api/token/:id/custom-share`：重新生成，旧分享码立即失效。
+- `DELETE /api/token/:id/custom-share`：关闭分享，不删除模型调用密钥。
+
+这些管理操作均验证当前用户归属，不能为原本没有分享资格的密钥开启分享。分享页内部通过 `POST /api/custom/token-share` 查询，只接收 JSON 中的 `custom_share_code`，不接受 URL 查询参数作为凭据。该数据入口限制匿名请求体和访问频率，返回 `no-store`。分享仅存储一个 `custom_share_code` 字段：使用密码学安全随机数生成 8 位大小写字母与数字，数据库按区分大小写的规则建立唯一索引。关闭分享时在已存码前加 `-` 标记撤销；此标记不能用于访问，保留其再次生成资格，无需另加状态列。普通列表不披露分享码。应用日志隐藏 `/ck/` 后的凭据，页面发送 `Referrer-Policy: no-referrer`；反向代理与 APM 也应脱敏该路径。管理操作的审计记录仅包含动作和密钥 ID，不记录手机号、完整密钥或分享凭据。
+
+
+禁用/删除/过期的密钥或被禁用/删除的所有者不再允许分享访问。额度耗尽仍可查看额度。关闭或重置分享不能撤回已经复制的模型调用密钥；需要阻断模型调用时应禁用或删除密钥。页面刷新失败时隐藏旧详情；已经送达客户端的信息无法远程收回。
+
+安全设计参考 [OWASP ASVS 5.0.0](https://github.com/OWASP/ASVS/tree/v5.0.0)、[Authentication Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html)、[Session Management Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html) 和 [Authorization Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html)。本扩展的验证范围为服务端归属校验、PAT/模型密钥隔离、不可预测凭据、撤销/轮换/到期失效、无缓存披露和审计去敏；不构成整站 ASVS 合规声明。生产部署必须使用 HTTPS，并让网关/APM 排除凭据请求体、响应体及 Authorization 头。
+
+### 本扩展验证记录（2026-09-24）
+
+实际数据库：SQLite 3.50.4、MySQL 8.0.46、PostgreSQL 15.19。三种数据库均验证全新建库，以及从发布版 `v1.0.0-rc.40` 的 Token 表结构升级；连续迁移及后续迁移无 DDL、原数据与索引保留、并发订单唯一性、软删除占用和硬删除释放均通过。审计单独日志库回归也通过。
+
+使用隔离的临时数据库运行（以下密码仅用于已销毁的本地测试容器）：
+
+```sh
+AUDIT_MYSQL_DSN='root:custom-key-test-only@tcp(127.0.0.1:23306)/mysql?parseTime=true' \
+AUDIT_POSTGRES_DSN='postgres://postgres:custom-key-test-only@127.0.0.1:25432/postgres?sslmode=disable' \
+go test ./controller -run 'TestCustomTokenDatabaseMatrix|TestCustomShareAccessLogRedactsCode|TestCustomShareURLConfiguration|TestAPITokenAuditDatabaseMatrix|TestAddToken|TestListModels|TestGetModelListGroups' -count=1 -v
+go build ./...
+
+cd web
+bun run test src/features/keys/__tests__/custom-share.test.tsx src/features/keys/components/__tests__/api-key-listing.test.tsx src/features/keys/components/__tests__/api-keys-mutate-drawer.test.tsx src/features/keys/components/__tests__/api-addresses.test.tsx
+bun run typecheck
+bun run build
+```
+
+2026-09-24 的后端数据库回归、后端构建及前端 39 项测试均通过。前端 typecheck、生产构建及以下浏览器检查沿用 2026-09-23 的验证结果（本次仅更新手机号测试数据）：另用模拟接口在真实浏览器的 375px 宽度检查匿名分享页：长密钥、手机号和长模型名正常换行，无横向溢出；浏览器检查未使用真实用户凭据。

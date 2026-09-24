@@ -24,6 +24,8 @@ import { z } from 'zod'
 
 export const apiKeySchema = z.object({
   id: z.number(),
+  custom_share_available: z.boolean().optional(),
+  custom_share_enabled: z.boolean().optional(),
   name: z.string(),
   key: z.string(),
   status: z.number(), // 1: enabled, 2: disabled, 3: expired, 4: exhausted
@@ -111,3 +113,4 @@ export type ApiKeysDialogType =
   | 'delete'
   | 'batch-delete'
   | 'cc-switch'
+  | 'custom-share'

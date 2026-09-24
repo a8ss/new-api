@@ -213,6 +213,8 @@ func TokenOperationAudit() gin.HandlerFunc {
 		switch c.Request.Method + " " + c.FullPath() {
 		case "POST /api/token/":
 			action, content = "token.create", "API token creation"
+		case "POST /api/token/derive":
+			action, content = "token.derive", "API token derivation"
 		case "PUT /api/token/":
 			action, content = "token.update", "API token configuration update"
 			if c.Query("status_only") != "" {
@@ -224,6 +226,12 @@ func TokenOperationAudit() gin.HandlerFunc {
 			action, content = "token.delete_batch", "API token batch deletion"
 		case "POST /api/token/:id/key":
 			action, content = "token.key_view", "API token key access"
+		case "POST /api/token/:id/custom-share":
+			action, content = "token.custom_share_view", "API token share link access"
+		case "PUT /api/token/:id/custom-share":
+			action, content = "token.custom_share_reset", "API token share link rotation"
+		case "DELETE /api/token/:id/custom-share":
+			action, content = "token.custom_share_revoke", "API token share link revocation"
 		case "POST /api/token/batch/keys":
 			action, content = "token.key_view_batch", "API token batch key access"
 		default:

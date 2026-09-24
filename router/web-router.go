@@ -36,6 +36,11 @@ func SetWebRouter(router *gin.Engine, assets WebAssets, pluginDispatcher gin.Han
 				return
 			}
 			c.Header("Cache-Control", "no-cache")
+			if strings.HasPrefix(c.Request.URL.Path, "/ck/") {
+				c.Header("Cache-Control", "no-store")
+				c.Header("Referrer-Policy", "no-referrer")
+				c.Header("X-Robots-Tag", "noindex, nofollow, noarchive")
+			}
 			c.Data(http.StatusOK, "text/html; charset=utf-8", assets.IndexPage)
 		},
 	)

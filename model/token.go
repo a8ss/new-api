@@ -9,6 +9,7 @@ import (
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/bytedance/gopkg/util/gopool"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 type Token struct {
@@ -30,6 +31,12 @@ type Token struct {
 	CrossGroupRetry    bool           `json:"cross_group_retry"` // 跨分组重试，仅auto分组有效
 	AutoGroups         string         `json:"-" gorm:"type:text"`
 	DeletedAt          gorm.DeletedAt `gorm:"index"`
+
+	// Nullable identities allow existing tokens without integration metadata.
+	CustomOrderNo *CustomCaseSensitiveString `json:"custom_order_no" gorm:"size:128;uniqueIndex:idx_tokens_custom_order_no"`
+	CustomPhone   string                     `json:"custom_phone" gorm:"type:varchar(32)"`
+	// A leading "-" marks a revoked share, retaining eligibility in the same field.
+	CustomShareCode *CustomCaseSensitiveString `json:"-" gorm:"size:9;uniqueIndex:idx_tokens_custom_share_code"`
 }
 
 func (token *Token) GetAutoGroups() ([]string, error) {
@@ -301,8 +308,14 @@ func GetTokenByKey(key string, fromDB bool) (token *Token, err error) {
 }
 
 func (token *Token) Insert() error {
-	var err error
-	err = DB.Create(token).Error
+	// Failed INSERT logs can contain usable credentials; keep this write silent.
+	err := DB.Session(&gorm.Session{Logger: DB.Logger.LogMode(logger.Silent)}).Create(token).Error
+	if err != nil && token.CustomOrderNo != nil {
+		var count int64
+		if DB.Unscoped().Model(&Token{}).Where("custom_order_no = ?", *token.CustomOrderNo).Count(&count).Error == nil && count > 0 {
+			return ErrCustomOrderExists
+		}
+	}
 	return err
 }
 
