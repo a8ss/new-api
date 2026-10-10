@@ -951,7 +951,7 @@ func TestCustomTokenDatabaseMatrix(t *testing.T) {
 					require.NoError(t, db.Create(&customReleasedToken{Id: 41, Key: "release-key", Name: "legacy", AutoGroups: `["default"]`, RemainQuota: 123, ExpiredTime: -1}).Error)
 				}
 				for range 2 {
-					require.NoError(t, db.AutoMigrate(&model.Token{}, &model.User{}, &model.UserSession{}, &model.Ability{}))
+					require.NoError(t, db.AutoMigrate(&model.Token{}, &model.User{}, &model.UserSession{}, &model.UserAccessToken{}, &model.Ability{}))
 				}
 				var migrationLog bytes.Buffer
 				traced := db.Session(&gorm.Session{Logger: logger.New(log.New(&migrationLog, "", 0), logger.Config{LogLevel: logger.Info})})
@@ -991,6 +991,8 @@ func verifyCustomTokenContract(t *testing.T, db *gorm.DB) {
 	other := model.User{Username: "custom-other", Password: "unused", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1, AccessToken: &otherPAT, AffCode: "custom-other"}
 	require.NoError(t, db.Create(&owner).Error)
 	require.NoError(t, db.Create(&other).Error)
+	pat, _ = createScopedAccessToken(t, owner.Id, 0, "api_key:read", "api_key:write", "api_key:reveal")
+	otherPAT, _ = createScopedAccessToken(t, other.Id, 0, "api_key:read", "api_key:write", "api_key:reveal")
 	require.NoError(t, db.Create(&model.Ability{Group: "default", Model: "test-allowed", ChannelId: 1, Enabled: true}).Error)
 	require.NoError(t, db.Create(&model.Ability{Group: "default", Model: "test-denied", ChannelId: 1, Enabled: true}).Error)
 	router := gin.New()
