@@ -1057,7 +1057,7 @@ func verifyCustomTokenContract(t *testing.T, db *gorm.DB) {
 	assert.Equal(t, common.TokenStatusEnabled, stored.Status)
 	assert.Zero(t, stored.UsedQuota)
 	assert.Equal(t, source.RemainQuota, stored.RemainQuota)
-	assert.Equal(t, source.ExpiredTime, stored.ExpiredTime)
+	assert.Equal(t, stored.CreatedTime+30*86400, stored.ExpiredTime)
 	assert.Equal(t, source.ModelLimits, stored.ModelLimits)
 	assert.Equal(t, source.AllowIps, stored.AllowIps)
 	assert.Equal(t, source.Group, stored.Group)
@@ -1141,38 +1141,56 @@ func verifyCustomTokenContract(t *testing.T, db *gorm.DB) {
 	} {
 		assert.False(t, decodeAPIResponse(t, perform("POST", "/api/token/derive", pat, invalid)).Success)
 	}
-	// Overrides distinguish omitted values from zero; all other configuration stays inherited.
+	// Empty names inherit the source; expiry defaults to 30 days and zero amounts remain valid.
 	for i, tc := range []struct {
-		fields string
-		ok     bool
+		fields, name string
+		days         int64
+		quota        int
+		ok           bool
 	}{
-		{`"name":"renamed","valid_days":7,"amount":2`, true},
-		{`"name":"","valid_days":0,"amount":0`, true},
-		{`"amount":-1`, false}, {`"amount":1.5`, false}, {`"amount":1000000001`, false},
-		{`"valid_days":-1`, false}, {`"valid_days":9223372036854775807`, false},
-		{`"name":"` + strings.Repeat("n", 51) + `"`, false},
+		{fields: `"name":"renamed","valid_days":7,"amount":2`, name: "renamed", days: 7, quota: 1000000, ok: true},
+		{fields: `"amount":0`, days: 30, ok: true},
+		{fields: `"name":"","amount":0`, days: 30, ok: true},
+		{fields: `"name":null,"valid_days":null`, days: 30, quota: 100, ok: true},
+		{fields: `"valid_days":1`, days: 1, quota: 100, ok: true},
+		{fields: `"amount":-1`}, {fields: `"amount":1.5`}, {fields: `"amount":1000000001`},
+		{fields: `"valid_days":0`}, {fields: `"valid_days":-1`}, {fields: `"valid_days":1.5`}, {fields: `"valid_days":9223372036854775807`},
+		{fields: `"name":"` + strings.Repeat("n", 51) + `"`},
 	} {
-		request := fmt.Sprintf(`{"source_token_id":%d,"custom_order_no":"override-%d","custom_phone":"13800138000",%s}`, source.Id, i, tc.fields)
+		order := fmt.Sprintf("override-%d", i)
+		request := fmt.Sprintf(`{"source_token_id":%d,"custom_order_no":"%s","custom_phone":"13800138000",%s}`, source.Id, order, tc.fields)
 		before := common.GetTimestamp()
 		result := perform("POST", "/api/token/derive", jwt, request)
 		parsed := decodeAPIResponse(t, result)
 		require.Equal(t, tc.ok, parsed.Success, result.Body.String())
-		if tc.ok {
-			var details customTokenDetails
-			require.NoError(t, common.Unmarshal(parsed.Data, &details))
-			assert.Zero(t, details.UsedQuota)
-			assert.False(t, details.UnlimitedQuota)
-			if i == 0 {
-				assert.Equal(t, "renamed", details.Name)
-				assert.Equal(t, 1000000, details.RemainQuota)
-				assert.GreaterOrEqual(t, details.ExpiredTime, before+7*86400)
-				assert.LessOrEqual(t, details.ExpiredTime, common.GetTimestamp()+7*86400)
-			} else {
-				assert.Empty(t, details.Name)
-				assert.Zero(t, details.RemainQuota)
-				assert.EqualValues(t, -1, details.ExpiredTime)
-			}
+		if !tc.ok {
+			var count int64
+			require.NoError(t, db.Model(&model.Token{}).Where("custom_order_no = ?", order).Count(&count).Error)
+			assert.Zero(t, count)
+			continue
 		}
+		var details customTokenDetails
+		require.NoError(t, common.Unmarshal(parsed.Data, &details))
+		assert.Zero(t, details.UsedQuota)
+		assert.False(t, details.UnlimitedQuota)
+		name := tc.name
+		if name == "" {
+			name = source.Name
+		}
+		assert.Equal(t, name, details.Name)
+		assert.Equal(t, tc.quota, details.RemainQuota)
+		assert.GreaterOrEqual(t, details.ExpiredTime, before+tc.days*86400)
+		assert.LessOrEqual(t, details.ExpiredTime, common.GetTimestamp()+tc.days*86400)
+		var derived model.Token
+		require.NoError(t, db.First(&derived, details.ID).Error)
+		assert.Equal(t, name, derived.Name)
+		assert.Equal(t, derived.CreatedTime+tc.days*86400, derived.ExpiredTime)
+		assert.Equal(t, strings.TrimSpace(order), string(*derived.CustomOrderNo))
+		shared := perform("POST", "/api/custom/token-share", "", `{"custom_share_code":"`+derived.ActiveCustomShareCode()+`"}`)
+		require.NoError(t, common.Unmarshal(shared.Body.Bytes(), &sharedResponse))
+		require.True(t, sharedResponse.Success)
+		assert.Equal(t, name, sharedResponse.Data.Name)
+		assert.NotContains(t, shared.Body.String(), "13800138000")
 	}
 	for _, sourceID := range []int{0, 999999, foreignSource.Id, stored.Id} {
 		request := fmt.Sprintf(`{"source_token_id":%d,"custom_order_no":"denied","custom_phone":"13800138000"}`, sourceID)

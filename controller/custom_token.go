@@ -105,23 +105,22 @@ func DeriveToken(c *gin.Context) {
 	token.CreatedTime, token.AccessedTime = now, now
 	order := model.CustomCaseSensitiveString(request.OrderNo)
 	token.CustomOrderNo, token.CustomPhone, token.CustomShareCode = &order, request.Phone, nil
-	if request.Name != nil {
+	if request.Name != nil && *request.Name != "" {
 		token.Name = *request.Name
 	}
 	if len(token.Name) > 50 {
 		common.ApiError(c, errors.New("API key name must not exceed 50 bytes"))
 		return
 	}
+	validDays := int64(30)
 	if request.ValidDays != nil {
-		if *request.ValidDays < 0 || *request.ValidDays > (math.MaxInt64-now)/86400 {
-			common.ApiError(c, errors.New("Invalid validity days"))
-			return
-		}
-		token.ExpiredTime = -1
-		if *request.ValidDays > 0 {
-			token.ExpiredTime = now + *request.ValidDays*86400
-		}
+		validDays = *request.ValidDays
 	}
+	if validDays <= 0 || validDays > (math.MaxInt64-now)/86400 {
+		common.ApiError(c, errors.New("Invalid validity days"))
+		return
+	}
+	token.ExpiredTime = now + validDays*86400
 	if request.Amount != nil {
 		if *request.Amount < 0 || *request.Amount > 1_000_000_000 || common.QuotaPerUnit <= 0 || math.IsNaN(common.QuotaPerUnit) || math.IsInf(common.QuotaPerUnit, 0) {
 			common.ApiError(c, errors.New("Invalid amount or quota conversion setting"))

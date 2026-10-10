@@ -209,11 +209,11 @@ Proof 同时绑定用户、登录会话、用户鉴权版本、会话版本和 s
 | `source_token_id` | 必填，当前用户拥有且状态为禁用的密钥 ID；其他用户、已删除、不存在或其他状态均拒绝 |
 | `custom_order_no` | 必填且非空，最多 128 UTF-8 字节；去除首尾空白、区分大小写、保留前导零 |
 | `custom_phone` | 必填且非空，最多 32 字节；7–15 位数字，允许开头的 `+`、空格、括号、连字符；未验证的联系方式，不要求唯一 |
-| `name` | 可选，传入则覆盖名称，最多 50 字节；空字符串也会覆盖 |
-| `valid_days` | 可选，非负整数，从派生时计算有效天数；0 为永久。不传则继承源密钥原到期时间，不重新计算 |
+| `name` | 可选，非空时覆盖名称，最多 50 字节；省略、`null` 或空字符串继承源密钥名称 |
+| `valid_days` | 可选，必须为正整数，从派生时按每天 86400 秒计算有效期；省略或 `null` 默认 30 天，不继承源密钥到期时间；0、负数、小数和时间溢出均拒绝 |
 | `amount` | 可选，0–1,000,000,000 的整数，按 `amount × QuotaPerUnit` 转为额度，沿用平台严格额度转换和舍入，溢出拒绝；传入时关闭无限额度，0 表示零额度 |
 
-复制源密钥的额度、无限额度标记、模型限制、IP 限制、分组、自动分组和跨组重试配置；上述可选参数仅覆盖对应值。新密钥 ID 和 key 重新生成，状态设为可用，创建/访问时间设为当前时间，已用额度归零，独立生成分享码；源密钥不变。金额只设置密钥限额，不充值用户账户。不传有效期或金额会继承源值，因此已到期或零额度的源配置需要调用方按需覆盖，状态启用并不绕过模型调用时的额度和到期校验。
+复制源密钥的额度、无限额度标记、模型限制、IP 限制、分组、自动分组和跨组重试配置；金额参数仅覆盖对应额度。名称和有效期按上述规则设置。新密钥 ID 和 key 重新生成，状态设为可用，创建/访问时间设为当前时间，已用额度归零，独立生成分享码；源密钥不变。金额只设置密钥限额，不充值用户账户。不传金额会继承源值，零额度的源配置需要调用方按需覆盖，状态启用并不绕过模型调用时的额度和到期校验。本规则仅用于新派生密钥，不修改已有密钥或普通创建接口的有效期行为。
 
 订单号在平台内全局唯一，包含软删除密钥；用户硬删除清理密钥后释放订单占用。数据库直接在 `custom_order_no` 上建立唯一索引（MySQL 使用 `utf8mb4_bin`，SQLite/PostgreSQL 区分大小写）。并发重复订单返回 HTTP 409、`success: false`、`Order number already has an API key`，不返回已有密钥。订单及手机号仅在派生时写入，普通密钥更新不能更改订单绑定。仅保留 `custom_order_no`、`custom_phone`、`custom_share_code` 三个存储字段，不增加产品表或未上线中间方案的兼容迁移。
 
@@ -237,7 +237,7 @@ Content-Type: application/json
 | 字段 | 含义 |
 | --- | --- |
 | `id`, `name`, `key` | 新密钥 ID、名称和完整密钥；`key` 不附加 `sk-` |
-| `status`, `expired_time` | 当前有效状态及 Unix 秒级到期时间；`-1` 为永久 |
+| `status`, `expired_time` | 当前有效状态及 Unix 秒级到期时间；派生接口始终设置有限有效期 |
 | `remain_quota`, `used_quota`, `unlimited_quota` | 额度计数与无限额度标记；单位为平台 quota |
 | `api_addresses` | 配置的模型 API 地址列表；未配置时前端使用当前站点地址 |
 | `models` | 与 `/v1/models` 共用逻辑，按分组、模型限制和计费配置筛选的模型列表 |
@@ -262,6 +262,19 @@ Content-Type: application/json
 禁用/删除/过期的密钥或被禁用/删除的所有者不再允许分享访问。额度耗尽仍可查看额度。关闭或重置分享不能撤回已经复制的模型调用密钥；需要阻断模型调用时应禁用或删除密钥。页面刷新失败时隐藏旧详情；已经送达客户端的信息无法远程收回。
 
 安全设计参考 [OWASP ASVS 5.0.0](https://github.com/OWASP/ASVS/tree/v5.0.0)、[Authentication Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html)、[Session Management Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html) 和 [Authorization Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html)。本扩展的验证范围为服务端归属校验、PAT/模型密钥隔离、不可预测凭据、撤销/轮换/到期失效、无缓存披露和审计去敏；不构成整站 ASVS 合规声明。生产部署必须使用 HTTPS，并让网关/APM 排除凭据请求体、响应体及 Authorization 头。
+
+### 名称与有效期调整验证（2026-10-10）
+
+本次按 ASVS 5.0.0 的 [V2.2.1、V2.2.2](https://github.com/OWASP/ASVS/blob/v5.0.0/5.0/en/0x11-V2-Validation-and-Business-Logic.md) 在服务端验证名称和有效期。回归覆盖名称省略、`null`、空字符串继承源名称，非空名称覆盖，默认 30 天和显式正整数天数，非正数、小数、时间溢出拒绝且不创建密钥，以及持久化与分享响应一致；原有归属、认证凭据隔离、分享到期和撤销回归也通过。
+
+实际数据库为 SQLite 3.50.4、MySQL 8.0.46、PostgreSQL 15.19；全新建库和从 `v1.0.0-rc.40` Token 表结构升级的六个组合均通过，连续迁移保持幂等。以下命令使用本次独立的临时测试容器，端口和密码仅用于本次本机验证：
+
+```sh
+AUDIT_MYSQL_DSN='root:derive-test-only@tcp(127.0.0.1:32777)/mysql?parseTime=true' AUDIT_POSTGRES_DSN='postgres://postgres:derive-test-only@127.0.0.1:32778/postgres?sslmode=disable' go test ./controller -run 'TestCustomTokenDatabaseMatrix|TestCustomShareAccessLogRedactsCode|TestCustomShareURLConfiguration' -count=1 -v > /tmp/new-api-derive-tests-01a123e2.log 2>&1
+go build ./...
+```
+
+上述回归和根模块构建通过，OpenAPI JSON 解析及有效期的 `minimum: 1`、`default: 30` 校验通过。未运行整仓测试或前端检查；调用方显式传 `valid_days: 0` 将被拒绝。
 
 ### 本扩展验证记录（2026-09-24）
 
