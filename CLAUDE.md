@@ -14,3 +14,17 @@ Rules:
 - After reading, follow every rule in `AGENTS.md` for the rest of the work.
 - If the task touches `web/`, also Read `web/AGENTS.md` before editing frontend files.
 - If the task touches billing as defined under **Billing rules (mandatory read gate)** in `AGENTS.md`, also Read `.agents/rules/billing.md` in full before planning or editing. Tasks outside that definition may skip it.
+
+## Agent skills
+
+### Issue tracker
+
+使用 a8ss/new-api 的 GitHub Issues；处理工单前读取 `docs/agents/issue-tracker.md`。
+
+### Triage labels
+
+使用五个默认分诊标签；分诊前读取 `docs/agents/triage-labels.md`。
+
+### Domain docs
+
+采用 single-context 布局；探索代码前读取 `docs/agents/domain.md`。
