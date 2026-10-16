@@ -215,6 +215,10 @@ func TokenOperationAudit() gin.HandlerFunc {
 			action, content = "token.create", "API token creation"
 		case "POST /api/token/derive":
 			action, content = "token.derive", "API token derivation"
+		case "POST /api/token/:id/sms-send", "POST /api/sms/tokens/:id/send":
+			action, content = "token.sms_send", "API token SMS submission"
+		case "POST /api/sms/upstream/pull":
+			action, content = "sms.upstream_pull", "Incoming SMS retrieval"
 		case "PUT /api/token/":
 			action, content = "token.update", "API token configuration update"
 			if c.Query("status_only") != "" {

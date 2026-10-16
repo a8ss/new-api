@@ -40,6 +40,7 @@ import { useApiInfo } from '@/features/dashboard/hooks/use-status-data'
 import { useStatus } from '@/hooks/use-status'
 
 import { useApiKeys } from './api-keys-provider'
+import { CustomSMSManagement } from './custom-sms-dialog'
 
 export function ApiKeysPrimaryButtons() {
   const { t } = useTranslation()
@@ -62,6 +63,7 @@ export function ApiKeysPrimaryButtons() {
 
   return (
     <div className='flex flex-wrap gap-2'>
+      <CustomSMSManagement />
       <Popover>
         <PopoverTrigger render={<Button variant='outline' size='sm' />}>
           <Globe aria-hidden='true' />

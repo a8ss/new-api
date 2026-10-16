@@ -1035,10 +1035,14 @@ func verifyCustomTokenContract(t *testing.T, db *gorm.DB) {
 			OrderNo string `json:"custom_order_no"`
 			Code    string `json:"custom_share_code"`
 			URL     string `json:"custom_share_url"`
+			SMS     struct {
+				Status string `json:"status"`
+			} `json:"sms"`
 		} `json:"data"`
 	}
 	require.NoError(t, common.Unmarshal(created.Body.Bytes(), &response))
 	require.True(t, response.Success, created.Body.String())
+	assert.Equal(t, "not_recorded", response.Data.SMS.Status, "a missing SMS log table must not fail key derivation")
 	assert.Equal(t, "001Order", response.Data.OrderNo)
 	assert.Equal(t, "+86 13800138000", response.Data.CustomPhone)
 	assert.ElementsMatch(t, []string{"test-allowed"}, response.Data.Models)
@@ -1324,7 +1328,7 @@ func TestCustomShareURLConfiguration(t *testing.T) {
 		{"https://user:password@keys.example.test", "/ck/AbCd1234"},
 	} {
 		t.Setenv("CUSTOM_TOKEN_SHARE_BASE_URL", tc.base)
-		assert.Equal(t, tc.expected, customShareURL("AbCd1234"))
-		assert.Empty(t, customShareURL(""))
+		assert.Equal(t, tc.expected, service.CustomTokenShareURL("AbCd1234"))
+		assert.Empty(t, service.CustomTokenShareURL(""))
 	}
 }

@@ -114,3 +114,4 @@ export type ApiKeysDialogType =
   | 'batch-delete'
   | 'cc-switch'
   | 'custom-share'
+  | 'custom-sms'

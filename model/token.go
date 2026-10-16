@@ -33,8 +33,9 @@ type Token struct {
 	DeletedAt          gorm.DeletedAt `gorm:"index"`
 
 	// Nullable identities allow existing tokens without integration metadata.
-	CustomOrderNo *CustomCaseSensitiveString `json:"custom_order_no" gorm:"size:128;uniqueIndex:idx_tokens_custom_order_no"`
-	CustomPhone   string                     `json:"custom_phone" gorm:"type:varchar(32)"`
+	CustomOrderNo       *CustomCaseSensitiveString `json:"custom_order_no" gorm:"size:128;uniqueIndex:idx_tokens_custom_order_no"`
+	CustomPhone         string                     `json:"custom_phone" gorm:"type:varchar(32)"`
+	CustomSourceTokenID *int                       `json:"custom_source_token_id,omitempty" gorm:"index"`
 	// A leading "-" marks a revoked share, retaining eligibility in the same field.
 	CustomShareCode *CustomCaseSensitiveString `json:"-" gorm:"size:9;uniqueIndex:idx_tokens_custom_share_code"`
 }

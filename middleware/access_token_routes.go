@@ -216,6 +216,8 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	"GET /api/token/search":              accessTokenScopeRule("api_key:read"),
 	"GET /api/token/auto-groups":         accessTokenScopeRule("api_key:read"),
 	"GET /api/token/:id":                 accessTokenScopeRule("api_key:read"),
+	"GET /api/token/:id/sms-logs":        accessTokenScopeRule("api_key:read"),
+	"POST /api/token/:id/sms-send":       {kind: accessTokenRuleScope, scope: "api_key:write", additionalScope: "api_key:reveal"},
 	"POST /api/token/:id/key":            accessTokenScopeRule("api_key:reveal"),
 	"POST /api/token/":                   accessTokenScopeRule("api_key:write"),
 	"POST /api/token/derive":             {kind: accessTokenRuleScope, scope: "api_key:write", additionalScope: "api_key:reveal"},

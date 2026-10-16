@@ -21,6 +21,8 @@ import (
 // accessTokenExemptRoutes are /api routes that never reach dashboard
 // authentication, so a personal access token has no rule to satisfy there.
 var accessTokenExemptRoutes = []string{
+	// Provider-authenticated callback; it never uses dashboard authentication.
+	"POST /api/sms/tongqiubao/callback",
 	// Anonymous pages and setup.
 	"GET /api/setup",
 	"POST /api/setup",

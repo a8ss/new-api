@@ -257,6 +257,16 @@ export function DataTableRowActions<TData>({
           <DropdownMenuItem
             onClick={() => {
               setCurrentRow(apiKey)
+              setOpen('custom-sms')
+            }}
+          >
+            {t('SMS history')}
+          </DropdownMenuItem>
+        )}
+        {apiKey.custom_share_available && (
+          <DropdownMenuItem
+            onClick={() => {
+              setCurrentRow(apiKey)
               setOpen('custom-share')
             }}
           >

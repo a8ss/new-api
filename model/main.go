@@ -342,6 +342,9 @@ func migrateDB() error {
 	err := DB.AutoMigrate(
 		&Channel{},
 		&Token{},
+		&CustomSMSTemplate{},
+		&CustomSMSSendLog{},
+		&CustomSMSEvent{},
 		&User{},
 		&UserSession{},
 		&AuthFlow{},

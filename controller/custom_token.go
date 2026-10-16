@@ -4,8 +4,6 @@ import (
 	"errors"
 	"math"
 	"net/http"
-	"net/url"
-	"os"
 	"strconv"
 	"strings"
 
@@ -13,6 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/console_setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/system_setting"
@@ -100,6 +99,8 @@ func DeriveToken(c *gin.Context) {
 	}
 	params := tokenAuditParams(c)
 	params["source_token_id"] = token.Id
+	sourceTokenID := token.Id
+	token.CustomSourceTokenID = &sourceTokenID
 	now := common.GetTimestamp()
 	token.Id, token.Status, token.UsedQuota = 0, common.TokenStatusEnabled, 0
 	token.CreatedTime, token.AccessedTime = now, now
@@ -169,30 +170,11 @@ func DeriveToken(c *gin.Context) {
 	common.SetContextKey(c, constant.ContextKeyTokenAuditSucceeded, true)
 	common.ApiSuccess(c, struct {
 		*customTokenDetails
-		OrderNo string `json:"custom_order_no"`
-		Code    string `json:"custom_share_code"`
-		URL     string `json:"custom_share_url"`
-	}{details, string(*token.CustomOrderNo), token.ActiveCustomShareCode(), customShareURL(token.ActiveCustomShareCode())})
-}
-
-func customShareURL(code string) string {
-	if code == "" {
-		return ""
-	}
-	// Do not trust Host/X-Forwarded-Host for credential-bearing links.
-	base := strings.TrimSpace(os.Getenv("CUSTOM_TOKEN_SHARE_BASE_URL"))
-	if base == "" {
-		base = strings.TrimSpace(system_setting.ServerAddress)
-	}
-	base = strings.TrimRight(base, "/")
-	parsed, err := url.Parse(base)
-	if err != nil || parsed.Host == "" || parsed.User != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") {
-		base = ""
-	} else {
-		parsed.RawQuery, parsed.Fragment = "", ""
-		base = strings.TrimRight(parsed.String(), "/")
-	}
-	return base + "/ck/" + code
+		OrderNo string                       `json:"custom_order_no"`
+		Code    string                       `json:"custom_share_code"`
+		URL     string                       `json:"custom_share_url"`
+		SMS     service.CustomSMSQueueResult `json:"sms"`
+	}{details, string(*token.CustomOrderNo), token.ActiveCustomShareCode(), service.CustomTokenShareURL(token.ActiveCustomShareCode()), service.CustomSMS.QueueAutomatic(token, c.GetInt("id"))})
 }
 
 func GetCustomTokenShare(c *gin.Context) {
@@ -285,5 +267,5 @@ func ManageCustomTokenShare(c *gin.Context) {
 	}
 	common.SetContextKey(c, constant.ContextKeyTokenAuditSucceeded, true)
 	code := token.ActiveCustomShareCode()
-	common.ApiSuccess(c, gin.H{"custom_share_code": code, "custom_share_url": customShareURL(code)})
+	common.ApiSuccess(c, gin.H{"custom_share_code": code, "custom_share_url": service.CustomTokenShareURL(code)})
 }
